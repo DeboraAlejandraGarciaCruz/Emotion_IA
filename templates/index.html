@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debora Garcia_EmotionAI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        /* Custom Styles for Dark Theme */
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+        }
+        h1 {
+            color: #ffffff;
+        }
+        h2 {
+            color: #f0f0f0;
+        }
+        .bg-custom {
+            background-color: #1f1f1f;
+        }
+        .btn-custom {
+            background-color: #28a745;;
+            color: white;
+            border-radius: 5px;
+            padding: 8px 12px;
+            transition: background-color 0.3s;
+        }
+        .btn-custom:hover {
+            background-color: #005fa3;
+        }
+        .progress-container {
+            height: 20px;
+            background: #555555;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .progress {
+            height: 100%;
+            background: #007acc;
+            width: 0;
+            transition: width 0.5s;
+        }
+        .border-custom {
+            border-color: #444444;
+        }
+        .title-container {
+            background-color: #007acc;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-custom min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Title Container -->
+        <div class="title-container">
+            <h1 class="text-4xl font-bold text-center">Avance del sistema de reconocimiento de Estados de Animo</h1>
+        </div>
+
+        <div class="max-w-2xl mx-auto bg-gray-800 rounded-lg shadow-lg p-6">
+            <div class="flex flex-col md:flex-row">
+                <!-- File Upload Section -->
+                <div class="md:w-1/2 mb-8 pr-4">
+                    <h2 class="text-2xl font-semibold mb-4">Subir aquí tu imagen o fotografía</h2>
+                    <form id="uploadForm" class="space-y-4">
+                        <div class="flex items-center justify-center w-full">
+                            <label class="flex flex-col w-full h-32 border-4 border-dashed border-gray-600 hover:bg-gray-700">
+                                <div class="flex flex-col items-center justify-center pt-7">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-gray-400 group-hover:text-gray-300" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd" />
+                                    </svg>
+                                    <p class="pt-1 text-sm tracking-wider text-gray-400 group-hover:text-gray-300">
+                                        Seleccione una imagen</p>
+                                </div>
+                                <input type="file" class="opacity-0" name="file" accept=".jpg,.jpeg,.png" />
+                            </label>
+                        </div>
+                        <button type="submit" class="btn-custom w-full">
+                            Analizar Fotografia
+                        </button>
+                    </form>
+
+                    <!-- Progress Bar Section -->
+                    <div id="progressSection" class="hidden mb-4">
+                        <h2 class="text-xl font-semibold mb-2">Análisis</h2>
+                        <div class="progress-container">
+                            <div id="progress" class="progress"></div>
+                        </div>
+                    </div>
+
+                    <!-- Loading Indicator -->
+                    <div id="loading" class="hidden">
+                        <div class="flex items-center justify-center p-4">
+                            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                        </div>
+                    </div>
+
+                    <!-- Error Display -->
+                    <div id="error" class="hidden mt-4 p-4 bg-red-800 border border-red-600 text-red-200 rounded-lg">
+                    </div>
+                </div>
+
+                <!-- Results Section -->
+                <div class="md:w-1/2 mb-8 pl-4">
+                    <h2 class="text-2xl font-semibold mb-4">Resultados de la detección de emociones</h2>
+                    <div id="results" class="hidden">
+                        <div class="border-custom border rounded-lg p-4">
+                            <img id="resultImage" class="max-w-full h-auto mx-auto" src="" alt="Resultado del Análisis">
+                        </div>
+                    </div>
+
+                    <!-- Existing Images Section -->
+                    {% if images %}
+                    <div class="mt-8">
+                        <h2 class="text-2xl font-semibold mb-4">Análisis previos</h2>
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            {% for image in images %}
+                            <div class="relative group">
+                                <img src="{{ url_for('static', filename='uploads/' + image) }}" 
+                                    alt="{{ image }}" 
+                                    class="w-full h-32 object-cover rounded-lg cursor-pointer hover:opacity-75 transition-opacity"
+                                    onclick="analyzeExisting('{{ image }}')">
+                                <div class="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs p-1 rounded-b-lg truncate">
+                                    {{ image }}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showLoading() {
+            $('#loading').removeClass('hidden');
+            $('#error').addClass('hidden');
+            $('#results').addClass('hidden');
+            $('#progressSection').addClass('hidden');
+        }
+
+        function hideLoading() {
+            $('#loading').addClass('hidden');
+        }
+
+        function showProgress() {
+            $('#progressSection').removeClass('hidden');
+            $('#progress').css('width', '0%');
+        }
+
+        function updateProgress(percentage) {
+            $('#progress').css('width', percentage + '%');
+        }
+
+        $(document).ready(function() {
+            $('#uploadForm').on('submit', function(e) {
+                e.preventDefault();
+                
+                var formData = new FormData(this);
+                showLoading();
+                showProgress();
+                
+                $.ajax({
+                    url: '/analyze',
+                    type: 'POST',
+                    data: formData,
+                    contentType: false,
+                    processData: false,
+                    xhr: function() {
+                        var xhr = new window.XMLHttpRequest();
+                        xhr.upload.addEventListener("progress", function(evt) {
+                            if (evt.lengthComputable) {
+                                var percentComplete = (evt.loaded / evt.total) * 100;
+                                updateProgress(percentComplete);
+                            }
+                        }, false);
+                        return xhr;
+                    },
+                    success: function(response) {
+                        hideLoading();
+                        $('#results').removeClass('hidden');
+                        $('#resultImage').attr('src', 'data:image/png;base64,' + response.image);
+                        updateProgress(100);
+                    },
+                    error: function(xhr) {
+                        hideLoading();
+                        $('#error')
+                            .removeClass('hidden')
+                            .text(xhr.responseJSON?.error || 'Ocurrió un error');
+                    }
+                });
+            });
+        });
+
+        function analyzeExisting(filename) {
+            showLoading();
+            showProgress();
+            
+            const formData = new FormData();
+            formData.append('existing_file', filename);
+            
+            $.ajax({
+                url: '/analyze',
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                xhr: function() {
+                    var xhr = new window.XMLHttpRequest();
+                    xhr.upload.addEventListener("progress", function(evt) {
+                        if (evt.lengthComputable) {
+                            var percentComplete = (evt.loaded / evt.total) * 100;
+                            updateProgress(percentComplete);
+                        }
+                    }, false);
+                    return xhr;
+                },
+                success: function(response) {
+                    hideLoading();
+                    $('#results').removeClass('hidden');
+                    $('#resultImage').attr('src', 'data:image/png;base64,' + response.image);
+                    updateProgress(100);
+                },
+                error: function(xhr) {
+                    hideLoading();
+                    $('#error')
+                        .removeClass('hidden')
+                        .text(xhr.responseJSON?.error || 'Ocurrió un error');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
+
