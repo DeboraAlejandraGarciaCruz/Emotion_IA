@@ -1,0 +1,7 @@
+Flask==2.0.1
+opencv-python-headless==4.5.3.56
+mediapipe==0.8.9.1
+numpy==1.21.2
+matplotlib==3.4.3
+Werkzeug==2.0.1
+pillow==8.3.1
