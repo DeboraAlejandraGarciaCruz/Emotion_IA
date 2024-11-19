@@ -24,7 +24,31 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def analyze_face(image_path):
+def adjust_brightness(image, value):
+    """Adjust the brightness of the image."""
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    h, s, v = cv2.split(hsv)
+    v = cv2.add(v, value)
+    v = np.clip(v, 0, 255)
+    final_hsv = cv2.merge((h, s, v))
+    return cv2.cvtColor(final_hsv, cv2.COLOR_HSV2BGR)
+
+def apply_transformation(image_path, transformation, brightness_value=0):
+    """Apply the selected transformation to the image."""
+    image = cv2.imread(image_path)
+    if image is None:
+        raise Exception("Could not load image")
+
+    if transformation == "flip_horizontal":
+        image = cv2.flip(image, 1)
+    elif transformation == "flip_vertical":
+        image = cv2.flip(image, 0)
+    elif transformation == "adjust_brightness":
+        image = adjust_brightness(image, brightness_value)
+    
+    return image
+
+def analyze_face(image_path, transformation=None, brightness_value=0):
     try:
         # Initialize MediaPipe Face Mesh
         mp_face_mesh = mp.solutions.face_mesh
@@ -34,8 +58,12 @@ def analyze_face(image_path):
             min_detection_confidence=0.5
         )
 
-        # Read image
-        image = cv2.imread(image_path)
+        # Read and optionally transform image
+        if transformation:
+            image = apply_transformation(image_path, transformation, brightness_value)
+        else:
+            image = cv2.imread(image_path)
+
         if image is None:
             raise Exception("Could not load image")
 
@@ -49,20 +77,13 @@ def analyze_face(image_path):
         if not results.multi_face_landmarks:
             raise Exception("No face detected in the image")
 
-
-        # Select 15 main keypoints
-        # key_points = [33, 133, 362, 263, 1, 61, 291, 199,
-        #             94, 0, 24, 130, 359, 288, 378]
-        # Select 12 main keypoints
-        key_points = [33, 133, 362, 263, 1, 61, 291, 199,
-                     94, 0, 24, 130]
-
+        # Key points for visualization
+        key_points = [33, 133, 362, 263, 1, 61, 291, 199, 94, 0, 24, 130]
         height, width = gray_image.shape
-        
+
         # Create a new figure for each analysis
         plt.clf()
         fig = plt.figure(figsize=(6, 6))
-        #fig = plt.figure(figsize=(2, 4))
         plt.imshow(gray_image, cmap='gray')
 
         # Plot facial landmarks
@@ -123,8 +144,12 @@ def analyze():
         else:
             return jsonify({'error': 'No file provided'}), 400
 
+        # Get transformation type and brightness value
+        transformation = request.form.get('transformation', None)
+        brightness_value = int(request.form.get('brightness', 0))  # Default: no change in brightness
+
         # Analyze the image
-        result_image = analyze_face(filepath)
+        result_image = analyze_face(filepath, transformation, brightness_value)
         
         return jsonify({
             'success': True,
