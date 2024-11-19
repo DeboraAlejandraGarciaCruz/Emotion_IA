@@ -9,28 +9,24 @@ import numpy as np
 import base64
 from io import BytesIO
 from werkzeug.utils import secure_filename
-import copy
-import random
 
 app = Flask(__name__)
 
-# Configuración del folder de uploads
+# Configure upload folder
 UPLOAD_FOLDER = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Tamaño máximo de 16MB
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-# Asegurar que el folder de uploads existe
+# Ensure upload directory exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-
 def analyze_face(image_path):
     try:
-        # Inicializamos MediaPipe Face Mesh
+        # Initialize MediaPipe Face Mesh
         mp_face_mesh = mp.solutions.face_mesh
         face_mesh = mp_face_mesh.FaceMesh(
             static_image_mode=True,
@@ -38,116 +34,110 @@ def analyze_face(image_path):
             min_detection_confidence=0.5
         )
 
-        # Cargar la imagen
+        # Read image
         image = cv2.imread(image_path)
         if image is None:
-            raise Exception("No se pudo cargar la imagen")
+            raise Exception("Could not load image")
 
-        # Convertimos a RGB y escala de grises
+        # Convert to RGB for MediaPipe
         rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        # Detectamos puntos faciales
+        # Detect facial landmarks
         results = face_mesh.process(rgb_image)
 
         if not results.multi_face_landmarks:
-            raise Exception("No se detectó ningún rostro en la imagen")
+            raise Exception("No face detected in the image")
 
-        # Puntos clave principales
-        key_points = [33, 133, 362, 263, 1, 61, 291, 199, 94, 0, 24, 130]
+
+        # Select 15 main keypoints
+        # key_points = [33, 133, 362, 263, 1, 61, 291, 199,
+        #             94, 0, 24, 130, 359, 288, 378]
+        # Select 12 main keypoints
+        key_points = [33, 133, 362, 263, 1, 61, 291, 199,
+                     94, 0, 24, 130]
 
         height, width = gray_image.shape
-
-        # Crear una nueva figura
+        
+        # Create a new figure for each analysis
         plt.clf()
         fig = plt.figure(figsize=(6, 6))
+        #fig = plt.figure(figsize=(2, 4))
         plt.imshow(gray_image, cmap='gray')
 
-        # Dibujar puntos faciales
+        # Plot facial landmarks
         for point_idx in key_points:
             landmark = results.multi_face_landmarks[0].landmark[point_idx]
             x = int(landmark.x * width)
             y = int(landmark.y * height)
             plt.plot(x, y, 'rx')
 
-        # Guardar el resultado en memoria
+        # Save plot to memory
         buf = BytesIO()
         plt.savefig(buf, format='png', bbox_inches='tight')
         buf.seek(0)
+        plt.close(fig)
 
-        # Convertir a base64
+        # Convert to base64
         image_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
         return image_base64
 
     except Exception as e:
-        print(f"Error en analyze_face: {str(e)}")
+        print(f"Error in analyze_face: {str(e)}")
         raise
     finally:
         plt.close('all')
 
-
-def augment_data(keyfacial_df):
-    try:
-        # Crear una copia del dataframe
-        keyfacial_df_copy = copy.copy(keyfacial_df)
-
-        # Voltear horizontalmente
-        keyfacial_df_copy['Image'] = keyfacial_df['Image'].apply(lambda x: np.flip(x, axis=1))
-        columns = keyfacial_df.columns[:-1]
-
-        for i in range(len(columns)):
-            if i % 2 == 0:
-                keyfacial_df_copy[columns[i]] = keyfacial_df_copy[columns[i]].apply(lambda x: 96. - float(x))
-
-        # Aumentar el brillo aleatoriamente
-        bright_df = copy.copy(keyfacial_df)
-        bright_df['Image'] = bright_df['Image'].apply(lambda x: np.clip(random.uniform(1.5, 2) * x, 0.0, 255.0))
-
-        # Combinar datos
-        augmented_df = np.concatenate((keyfacial_df, keyfacial_df_copy, bright_df))
-        return augmented_df
-
-    except Exception as e:
-        print(f"Error en augment_data: {str(e)}")
-        raise
-
-
 @app.route('/')
 def home():
-    images = [f for f in os.listdir(app.config['UPLOAD_FOLDER']) if allowed_file(f)]
+    # Get list of images in upload folder
+    images = []
+    for filename in os.listdir(app.config['UPLOAD_FOLDER']):
+        if allowed_file(filename):
+            images.append(filename)
     return render_template('index.html', images=images)
-
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
     try:
-        # Subir un archivo nuevo
-        if 'file' in request.files:
+        # Check if we're analyzing an existing file
+        if 'existing_file' in request.form:
+            filename = request.form['existing_file']
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            if not os.path.exists(filepath):
+                return jsonify({'error': f'File not found: {filename}'}), 404
+            
+        # Check if we're uploading a new file
+        elif 'file' in request.files:
             file = request.files['file']
             if file.filename == '':
-                return jsonify({'error': 'No se seleccionó un archivo'}), 400
-
+                return jsonify({'error': 'No file selected'}), 400
+            
             if not allowed_file(file.filename):
-                return jsonify({'error': 'Tipo de archivo no permitido'}), 400
-
+                return jsonify({'error': 'File type not allowed'}), 400
+            
             filename = secure_filename(file.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
+        
+        else:
+            return jsonify({'error': 'No file provided'}), 400
 
-        # Analizar la imagen
+        # Analyze the image
         result_image = analyze_face(filepath)
-
-        return jsonify({'success': True, 'image': result_image})
+        
+        return jsonify({
+            'success': True,
+            'image': result_image
+        })
 
     except Exception as e:
-        print(f"Error en /analyze: {str(e)}")
+        print(f"Error in /analyze: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/static/uploads/<filename>')
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-
 
 if __name__ == '__main__':
     app.run(debug=True)
