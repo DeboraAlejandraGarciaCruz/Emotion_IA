@@ -87,15 +87,56 @@ def analyze_face(image_path):
         buf.seek(0)
         plt.close(fig)
 
+        # Estimar emoción con landmarks
+        landmarks = results.multi_face_landmarks[0].landmark
+        emotion = estimate_emotion(landmarks, width, height)
+
+
         # Convert to base64
         image_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
-        return image_base64
+        return image_base64, emotion
+
 
     except Exception as e:
         print(f"Error in analyze_face: {str(e)}")
         raise
     finally:
         plt.close('all')
+
+def estimate_emotion(landmarks, width, height):
+    try:
+        # Extraer algunos puntos clave de expresión
+        left_mouth = landmarks[61]  # lado izquierdo de la boca
+        right_mouth = landmarks[291]  # lado derecho de la boca
+        top_mouth = landmarks[0]    # parte superior de la boca
+        bottom_mouth = landmarks[17]  # parte inferior de la boca
+
+        left_eye_top = landmarks[159]
+        left_eye_bottom = landmarks[145]
+        right_eye_top = landmarks[386]
+        right_eye_bottom = landmarks[374]
+
+        # Medidas (normalizadas)
+        mouth_width = abs(right_mouth.x - left_mouth.x)
+        mouth_height = abs(bottom_mouth.y - top_mouth.y)
+        eye_open_left = abs(left_eye_top.y - left_eye_bottom.y)
+        eye_open_right = abs(right_eye_top.y - right_eye_bottom.y)
+
+        # Reglas simples basadas en proporciones
+        if mouth_height > 0.08 and eye_open_left > 0.04:
+            return "Sorpresa"
+        elif mouth_height > 0.06 and mouth_width > 0.35:
+            return "Alegría"
+        elif eye_open_left < 0.02 and eye_open_right < 0.02:
+            return "Tristeza"
+        elif mouth_width < 0.25 and mouth_height < 0.03:
+            return "Enojo"
+        else:
+            return "Neutral"
+
+    except Exception as e:
+        print(f"Error in estimate_emotion: {e}")
+        return "Desconocida"
 
 @app.route('/')
 def home():
@@ -133,12 +174,14 @@ def analyze():
             return jsonify({'error': 'No file provided'}), 400
 
         # Analyze the image
-        result_image = analyze_face(filepath)
-        
+        result_image, emotion = analyze_face(filepath)
+
         return jsonify({
             'success': True,
-            'image': result_image
+            'image': result_image,
+            'emotion': emotion
         })
+
 
     except Exception as e:
         print(f"Error in /analyze: {str(e)}")
