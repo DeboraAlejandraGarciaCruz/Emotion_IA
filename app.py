@@ -16,7 +16,6 @@ UPLOAD_FOLDER = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
-
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def allowed_file(filename):
@@ -39,6 +38,7 @@ def analyze_face(image_path):
         gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
         results = face_mesh.process(rgb_image)
+
         if not results.multi_face_landmarks:
             raise Exception("No face detected in the image")
 
@@ -90,33 +90,44 @@ def analyze_face(image_path):
 def estimate_emotion(landmarks, width, height):
     try:
         def dist(p1, p2):
-            return np.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2)
+            return np.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2)
 
-        mouth_left = landmarks[61]
-        mouth_right = landmarks[291]
-        mouth_top = landmarks[0]
-        mouth_bottom = landmarks[17]
+        left_mouth = landmarks[61]
+        right_mouth = landmarks[291]
+        top_mouth = landmarks[0]
+        bottom_mouth = landmarks[17]
 
         left_eye_top = landmarks[159]
         left_eye_bottom = landmarks[145]
         right_eye_top = landmarks[386]
         right_eye_bottom = landmarks[374]
 
-        mouth_width = dist(mouth_left, mouth_right)
-        mouth_height = dist(mouth_top, mouth_bottom)
+        left_eyebrow = landmarks[65]
+        right_eyebrow = landmarks[295]
+        center_brow = landmarks[9]
+
+        mouth_width = dist(left_mouth, right_mouth)
+        mouth_height = dist(top_mouth, bottom_mouth)
         eye_open_left = dist(left_eye_top, left_eye_bottom)
         eye_open_right = dist(right_eye_top, right_eye_bottom)
+        brow_distance = dist(left_eyebrow, right_eyebrow)
+        brow_to_center = dist(center_brow, top_mouth)
 
-        if mouth_height > 0.06 and eye_open_left > 0.04 and eye_open_right > 0.04:
+        print("Mouth Height:", mouth_height, "Width:", mouth_width)
+        print("Eye Open L:", eye_open_left, "R:", eye_open_right)
+        print("Brow Dist:", brow_distance, "Brow to Mouth:", brow_to_center)
+
+        if mouth_height > 0.06 and eye_open_left > 0.05:
             return "Sorpresa"
-        elif mouth_height > 0.045 and mouth_width > 0.25:
+        elif mouth_height > 0.045 and mouth_width > 0.35:
             return "Alegría"
-        elif mouth_height < 0.02 and eye_open_left < 0.02 and eye_open_right < 0.02:
+        elif eye_open_left < 0.015 and eye_open_right < 0.015:
             return "Tristeza"
-        elif mouth_width < 0.18 and mouth_height < 0.03:
+        elif brow_distance < 0.10 and brow_to_center < 0.06:
             return "Enojo"
         else:
             return "Neutral"
+
     except Exception as e:
         print(f"Error in estimate_emotion: {e}")
         return "Desconocida"
@@ -137,15 +148,19 @@ def analyze():
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             if not os.path.exists(filepath):
                 return jsonify({'error': f'File not found: {filename}'}), 404
+
         elif 'file' in request.files:
             file = request.files['file']
             if file.filename == '':
                 return jsonify({'error': 'No file selected'}), 400
+
             if not allowed_file(file.filename):
                 return jsonify({'error': 'File type not allowed'}), 400
+
             filename = secure_filename(file.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
+
         else:
             return jsonify({'error': 'No file provided'}), 400
 
