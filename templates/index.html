@@ -8,7 +8,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <style>
-        /* Modern Style with Teal and Neon Highlights */
         body {
             font-family: 'Poppins', sans-serif;
             background-color: #0a0f0f;
@@ -122,7 +121,6 @@
 
 <body class="bg-custom min-h-screen">
     <div class="container mx-auto px-4 py-8">
-        <!-- Title Container -->
         <div class="title-container text-center">
             <h1 class="text-5xl font-bold">EmotionAI</h1>
         </div>
@@ -136,8 +134,12 @@
                         <div class="flex items-center justify-center w-full">
                             <label class="flex flex-col w-full h-40 border-4 border-dashed border-gray-600 file-upload">
                                 <div class="flex flex-col items-center justify-center pt-7">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-14 h-14 text-gray-400 group-hover:text-gray-300" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fill-rule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clip-rule="evenodd" />
+                                    <svg xmlns="http://www.w3.org/2000/svg"
+                                        class="w-14 h-14 text-gray-400 group-hover:text-gray-300" viewBox="0 0 20 20"
+                                        fill="currentColor">
+                                        <path fill-rule="evenodd"
+                                            d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"
+                                            clip-rule="evenodd" />
                                     </svg>
                                     <p class="pt-2 text-lg tracking-wider text-gray-400 group-hover:text-gray-300">
                                         Arrastra o selecciona una imagen</p>
@@ -174,8 +176,11 @@
                 <div class="md:w-1/2 mb-8 pl-6">
                     <h2 class="text-2xl font-semibold mb-6">Resultados de la Detección</h2>
                     <div id="results" class="hidden">
-                        <div class="border-custom border rounded-lg p-6">
-                            <img id="resultImage" class="max-w-full h-auto mx-auto" src="" alt="Resultado del Análisis">
+                        <div class="border-custom border rounded-lg p-6 text-center">
+                            <img id="resultImage" class="max-w-full h-auto mx-auto mb-4" src=""
+                                alt="Resultado del Análisis">
+                            <h3 class="text-xl font-semibold text-teal-300">Emoción Detectada:</h3>
+                            <p id="emotionResult" class="text-2xl mt-2 font-bold text-white">...</p>
                         </div>
                     </div>
                 </div>
@@ -192,6 +197,8 @@
                 $('#loading').removeClass('hidden');
                 $('#progressSection').removeClass('hidden');
                 $('#progress').css('width', '0%');
+                $('#results').addClass('hidden');
+                $('#error').addClass('hidden');
 
                 $.ajax({
                     url: '/analyze',
@@ -213,6 +220,7 @@
                         $('#loading').addClass('hidden');
                         $('#results').removeClass('hidden');
                         $('#resultImage').attr('src', 'data:image/png;base64,' + response.image);
+                        $('#emotionResult').text(response.emotion);
                         $('#progress').css('width', '100%');
                     },
                     error: function (xhr) {
