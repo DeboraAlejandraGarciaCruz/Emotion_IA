@@ -3,7 +3,7 @@ from flask import Flask, render_template, request, jsonify, send_from_directory
 import cv2
 import mediapipe as mp
 import matplotlib
-matplotlib.use('Agg')  # Set backend before importing pyplot
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import base64
@@ -12,13 +12,11 @@ from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
-# Configure upload folder
 UPLOAD_FOLDER = 'static/uploads'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
-# Ensure upload directory exists
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def allowed_file(filename):
@@ -26,7 +24,6 @@ def allowed_file(filename):
 
 def analyze_face(image_path):
     try:
-        # Initialize MediaPipe Face Mesh
         mp_face_mesh = mp.solutions.face_mesh
         face_mesh = mp_face_mesh.FaceMesh(
             static_image_mode=True,
@@ -34,26 +31,20 @@ def analyze_face(image_path):
             min_detection_confidence=0.5
         )
 
-        # Read image
         image = cv2.imread(image_path)
         if image is None:
             raise Exception("Could not load image")
 
-        # Convert to RGB for MediaPipe
         rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        # Detect facial landmarks
         results = face_mesh.process(rgb_image)
-
         if not results.multi_face_landmarks:
             raise Exception("No face detected in the image")
 
-        # Select 12 main keypoints
         key_points = [33, 133, 362, 263, 1, 61, 291, 199, 94, 0, 24, 130]
         height, width = gray_image.shape
 
-        # Prepare transformations
         transformations = [
             ("Original", gray_image),
             ("Horizontally Flipped", cv2.flip(gray_image, 1)),
@@ -61,7 +52,6 @@ def analyze_face(image_path):
             ("Upside Down", cv2.flip(gray_image, 0))
         ]
 
-        # Initialize figure
         fig, axes = plt.subplots(2, 2, figsize=(12, 12))
         axes = axes.flatten()
 
@@ -71,7 +61,6 @@ def analyze_face(image_path):
                 landmark = results.multi_face_landmarks[0].landmark[point_idx]
                 x = int(landmark.x * width)
                 y = int(landmark.y * height)
-                # Adjust keypoints for transformations
                 if title == "Horizontally Flipped":
                     x = width - x
                 elif title == "Upside Down":
@@ -80,22 +69,17 @@ def analyze_face(image_path):
             ax.set_title(title)
             ax.axis('off')
 
-        # Save plot to memory
         buf = BytesIO()
         plt.tight_layout()
         plt.savefig(buf, format='png', bbox_inches='tight')
         buf.seek(0)
         plt.close(fig)
 
-        # Estimar emoción con landmarks
         landmarks = results.multi_face_landmarks[0].landmark
         emotion = estimate_emotion(landmarks, width, height)
 
-
-        # Convert to base64
         image_base64 = base64.b64encode(buf.getvalue()).decode('utf-8')
         return image_base64, emotion
-
 
     except Exception as e:
         print(f"Error in analyze_face: {str(e)}")
@@ -105,42 +89,40 @@ def analyze_face(image_path):
 
 def estimate_emotion(landmarks, width, height):
     try:
-        # Extraer algunos puntos clave de expresión
-        left_mouth = landmarks[61]  # lado izquierdo de la boca
-        right_mouth = landmarks[291]  # lado derecho de la boca
-        top_mouth = landmarks[0]    # parte superior de la boca
-        bottom_mouth = landmarks[17]  # parte inferior de la boca
+        def dist(p1, p2):
+            return np.sqrt((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2)
+
+        mouth_left = landmarks[61]
+        mouth_right = landmarks[291]
+        mouth_top = landmarks[0]
+        mouth_bottom = landmarks[17]
 
         left_eye_top = landmarks[159]
         left_eye_bottom = landmarks[145]
         right_eye_top = landmarks[386]
         right_eye_bottom = landmarks[374]
 
-        # Medidas (normalizadas)
-        mouth_width = abs(right_mouth.x - left_mouth.x)
-        mouth_height = abs(bottom_mouth.y - top_mouth.y)
-        eye_open_left = abs(left_eye_top.y - left_eye_bottom.y)
-        eye_open_right = abs(right_eye_top.y - right_eye_bottom.y)
+        mouth_width = dist(mouth_left, mouth_right)
+        mouth_height = dist(mouth_top, mouth_bottom)
+        eye_open_left = dist(left_eye_top, left_eye_bottom)
+        eye_open_right = dist(right_eye_top, right_eye_bottom)
 
-        # Reglas simples basadas en proporciones
-        if mouth_height > 0.08 and eye_open_left > 0.04:
+        if mouth_height > 0.06 and eye_open_left > 0.04 and eye_open_right > 0.04:
             return "Sorpresa"
-        elif mouth_height > 0.06 and mouth_width > 0.35:
+        elif mouth_height > 0.045 and mouth_width > 0.25:
             return "Alegría"
-        elif eye_open_left < 0.02 and eye_open_right < 0.02:
+        elif mouth_height < 0.02 and eye_open_left < 0.02 and eye_open_right < 0.02:
             return "Tristeza"
-        elif mouth_width < 0.25 and mouth_height < 0.03:
+        elif mouth_width < 0.18 and mouth_height < 0.03:
             return "Enojo"
         else:
             return "Neutral"
-
     except Exception as e:
         print(f"Error in estimate_emotion: {e}")
         return "Desconocida"
 
 @app.route('/')
 def home():
-    # Get list of images in upload folder
     images = []
     for filename in os.listdir(app.config['UPLOAD_FOLDER']):
         if allowed_file(filename):
@@ -150,30 +132,23 @@ def home():
 @app.route('/analyze', methods=['POST'])
 def analyze():
     try:
-        # Check if we're analyzing an existing file
         if 'existing_file' in request.form:
             filename = request.form['existing_file']
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             if not os.path.exists(filepath):
                 return jsonify({'error': f'File not found: {filename}'}), 404
-            
-        # Check if we're uploading a new file
         elif 'file' in request.files:
             file = request.files['file']
             if file.filename == '':
                 return jsonify({'error': 'No file selected'}), 400
-            
             if not allowed_file(file.filename):
                 return jsonify({'error': 'File type not allowed'}), 400
-            
             filename = secure_filename(file.filename)
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
-        
         else:
             return jsonify({'error': 'No file provided'}), 400
 
-        # Analyze the image
         result_image, emotion = analyze_face(filepath)
 
         return jsonify({
@@ -181,7 +156,6 @@ def analyze():
             'image': result_image,
             'emotion': emotion
         })
-
 
     except Exception as e:
         print(f"Error in /analyze: {str(e)}")
@@ -192,6 +166,5 @@ def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))  # Usa el puerto que Render asigna
+    port = int(os.environ.get('PORT', 5000))
     app.run(debug=True, host='0.0.0.0', port=port)
-
